@@ -1,75 +1,166 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// File: app/(tabs)/index.tsx
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  SafeAreaView,
+  View,
+  Text,
+  Image,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  TextInput,
+  Alert,
+} from 'react-native';
+import axiosInstance from '../../apiConfig';
+import { useAuth } from '../../context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function HomeScreen() {
+// Component สำหรับแสดงสถานะวัตถุดิบ
+const StatusBadge = ({ status }: { status?: string }) => {
+    if (!status) return null;
+    const badgeStyle = status === 'ปกติ' ? styles.badgeNormal : styles.badgeWarning;
+    const textStyle = status === 'ปกติ' ? styles.badgeTextNormal : styles.badgeTextWarning;
+    return (
+        <View style={[styles.badgeContainer, badgeStyle]}>
+            <Text style={textStyle}>{status}</Text>
+        </View>
+    );
+};
+
+// Component สำหรับแสดงรายการเมนูแต่ละอย่าง
+const MenuItem = ({ menu, onStartCooking }: { menu: any, onStartCooking: (menu: any) => void }) => {
+  const imageUrl = menu.image_url
+    ? `${axiosInstance.defaults.baseURL}/${menu.image_url.replace(/\\/g, '/')}`
+    : 'https://placehold.co/200x200?text=No+Image';
+  
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.itemContainer}>
+      <Image source={{ uri: imageUrl }} style={styles.image} />
+      <View style={styles.infoContainer}>
+        <View>
+          <View style={styles.titleGroup}>
+            <Text style={styles.menuName} numberOfLines={2}>{menu.name}</Text>
+            <StatusBadge status={menu.status} />
+          </View>
+          <Text style={styles.menuPrice}>{Number(menu.price).toLocaleString()} ฿</Text>
+        </View>
+        <TouchableOpacity style={styles.cookButton} onPress={() => onStartCooking(menu)}>
+            <Text style={styles.cookButtonText}>เริ่มทำอาหาร</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
-}
+};
+
+// Screen หลักของหน้า Home/Index
+const HomeScreen = () => {
+  const [menus, setMenus] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  const fetchMenus = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get('/api/menus'); 
+      setMenus(response.data);
+    } catch (err) {
+      setError('ไม่สามารถดึงข้อมูลเมนูได้');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchMenus() }, []);
+
+  const filteredMenus = useMemo(() => {
+    if (!searchQuery) return menus;
+    return menus.filter(menu =>
+      menu.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [searchQuery, menus]);
+
+  const handleStartCooking = (menu: any) => {
+    if (!user) {
+      return Alert.alert("เกิดข้อผิดพลาด", "ไม่พบข้อมูลผู้ใช้");
+    }
+
+    Alert.alert(
+      'ยืนยันการทำอาหาร',
+      `คุณต้องการทำเมนู "${menu.name}" จำนวน 1 จานหรือไม่? (ระบบจะตัดสต็อกทันที)`,
+      [
+        { text: 'ยกเลิก', style: 'cancel' },
+        { 
+          text: 'ยืนยัน', 
+          onPress: async () => {
+            try {
+              const response = await axiosInstance.post('/api/cook', {
+                menu_id: menu.menu_id,
+                quantity: 1,
+                // ไม่ต้องส่ง user_id เพราะ Backend จะดึงจาก Token เอง
+              });
+              Alert.alert('สำเร็จ', response.data.message || "บันทึกและตัดสต็อกเรียบร้อย");
+              fetchMenus(); // รีเฟรชข้อมูลเมนูเพื่ออัปเดตสถานะสต็อก
+            } catch (err: any) {
+              const errorMessage = err.response?.data?.message || "เกิดข้อผิดพลาด";
+              Alert.alert('เกิดข้อผิดพลาด', errorMessage);
+            }
+          }
+        },
+      ]
+    );
+  };
+
+  if (loading) { return <View style={styles.centered}><ActivityIndicator size="large" color="#007bff" /></View>; }
+  if (error) { return <View style={styles.centered}><Text style={styles.errorText}>{error}</Text></View>; }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+        <TextInput style={styles.searchInput} placeholder="ค้นหาเมนู..." value={searchQuery} onChangeText={setSearchQuery} />
+      </View>
+      <FlatList
+        data={filteredMenus}
+        keyExtractor={(item) => item.menu_id.toString()}
+        renderItem={({ item }) => (
+          <MenuItem 
+            menu={item} 
+            onStartCooking={handleStartCooking}
+          />
+        )}
+        onRefresh={fetchMenus}
+        refreshing={loading}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
+      />
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f9fa' },
+    container: { flex: 1, backgroundColor: '#f8f9fa' },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, margin: 16, paddingHorizontal: 16, elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+    searchIcon: { marginRight: 8 },
+    searchInput: { flex: 1, paddingVertical: 14, fontSize: 16, color: '#333' },
+    itemContainer: { flexDirection: 'row', backgroundColor: 'white', borderRadius: 12, marginVertical: 8, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, overflow: 'hidden' },
+    image: { width: 100, height: 100, aspectRatio: 1 },
+    infoContainer: { flex: 1, padding: 14, justifyContent: 'space-between' },
+    titleGroup: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    menuName: { fontSize: 18, fontWeight: 'bold', color: '#212529', flexShrink: 1, marginRight: 8 },
+    menuPrice: { fontSize: 16, color: '#495057', marginTop: 4 },
+    cookButton: { backgroundColor: '#007bff', borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
+    cookButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+    errorText: { color: 'red', fontSize: 16, padding: 20, textAlign: 'center' },
+    badgeContainer: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+    badgeNormal: { backgroundColor: '#e7f5ff' },
+    badgeWarning: { backgroundColor: '#fff9e6' },
+    badgeTextNormal: { color: '#1c7ed6', fontSize: 12, fontWeight: '500' },
+    badgeTextWarning: { color: '#f79f1b', fontSize: 12, fontWeight: '500' },
 });
+
+export default HomeScreen;

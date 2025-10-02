@@ -1,43 +1,53 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
-import { Platform } from 'react-native';
+// File: app/(tabs)/_layout.tsx
 
-import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import TabBarBackground from '@/components/ui/TabBarBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { Tabs, useRouter } from 'expo-router';
+import { TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '@/context/AuthContext'; 
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { logout } = useAuth();
+  const router = useRouter();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
-        tabBarStyle: Platform.select({
-          ios: {
-            // Use a transparent background on iOS to show the blur effect
-            position: 'absolute',
-          },
-          default: {},
-        }),
+        tabBarActiveTintColor: 'blue',
+        headerShown: false, 
       }}>
       <Tabs.Screen
-        name="index"
+        name="index" // นี่คือหน้า Home
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'เลือกเมนูอาหาร',
+          headerShown: true, 
+          headerTitleAlign: 'left',
+          headerTitleStyle: {
+            fontSize: 22,
+            fontWeight: 'bold',
+          },
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />,
+          headerRight: () => (
+            <TouchableOpacity onPress={logout} style={{ marginRight: 15 }}>
+              <Ionicons name="log-out-outline" size={28} color="black" />
+            </TouchableOpacity>
+          ),
+          headerLeft: () => (
+             <TouchableOpacity onPress={() => router.push('/profile')} style={{ marginLeft: 15 }}>
+              <Ionicons name="person-circle-outline" size={28} color="black" />
+            </TouchableOpacity>
+          ),
         }}
       />
+      
+      {/* แท็บ Explore ถูกลบออกไปจากตรงนี้แล้ว */}
+
       <Tabs.Screen
-        name="explore"
+        name="profile" // นี่คือหน้า Profile
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'โปรไฟล์',
+          headerShown: true,
+          tabBarIcon: ({ color }) => <Ionicons name="person-circle" size={24} color={color} />,
         }}
       />
     </Tabs>

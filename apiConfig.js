@@ -1,4 +1,31 @@
-// ใส่ IP Address ใหม่ของคุณที่นี่
+// File: apiConfig.js
+
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ใส่ IP Address ของคุณที่นี่
 const API_BASE_URL = 'http://10.96.79.46:3000';
 
-export default API_BASE_URL;
+// สร้าง axios instance
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+});
+
+// *** นี่คือส่วนที่สำคัญที่สุด ***
+// Interceptor จะทำงานก่อนที่ทุก request จะถูกส่งออกไป
+axiosInstance.interceptors.request.use(
+  async (config) => {
+    // ดึง token ที่เก็บไว้ตอน login ออกมาจาก AsyncStorage
+    const token = await AsyncStorage.getItem('userToken');
+    if (token) {
+      // ถ้ามี token, ให้เพิ่มเข้าไปใน Header ของ request
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+export default axiosInstance;

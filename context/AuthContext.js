@@ -1,70 +1,65 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import axios from 'axios';
+// File: context/AuthContext.js
+
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axiosInstance from '../apiConfig.js'; 
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
-import API_BASE_URL from '../apiConfig';
 
-const AuthContext = createContext(null);
-const TOKEN_KEY = 'my-jwt';
-const USER_DATA_KEY = 'user-data';
-
-export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const router = useRouter();
-
-    useEffect(() => {
-        const loadUserFromStorage = async () => {
-            try {
-                const token = await SecureStore.getItemAsync(TOKEN_KEY);
-                const userDataString = await SecureStore.getItemAsync(USER_DATA_KEY);
-                if (token && userDataString) {
-                    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                    setUser(JSON.parse(userDataString));
-                }
-            } catch (e) {
-                console.error("Failed to load user from storage", e);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadUserFromStorage();
-    }, []);
-
-    const login = async (username, password) => {
-        try {
-            const response = await axios.post(`${API_BASE_URL}/api/users/login`, { username, password });
-            const { token, user: userData } = response.data;
-
-            await SecureStore.setItemAsync(TOKEN_KEY, token);
-            await SecureStore.setItemAsync(USER_DATA_KEY, JSON.stringify(userData));
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
-            // อัปเดต state เป็นขั้นตอนสุดท้าย
-            setUser(userData);
-
-            return response;
-        } catch (e) {
-            console.error("Login failed", e);
-            throw e;
-        }
-    };
-
-    const logout = () => {
-        setUser(null);
-        delete axios.defaults.headers.common['Authorization'];
-        SecureStore.deleteItemAsync(TOKEN_KEY);
-        SecureStore.deleteItemAsync(USER_DATA_KEY);
-        router.replace('/login');
-    };
-
-    return (
-        <AuthContext.Provider value={{ user, login, logout, isLoading }}>
-            {children}
-        </AuthContext.Provider>
-    );
-};
+const AuthContext = createContext();
 
 export const useAuth = () => {
-    return useContext(AuthContext);
+  return useContext(AuthContext);
+};
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  // **สำคัญ**: แก้ไข isLoading เป็น false เพื่อปิดฟังก์ชัน login อัตโนมัติชั่วคราว
+  const [isLoading, setIsLoading] = useState(false); 
+  const router = useRouter();
+
+  // **สำคัญ**: เราจะปิดส่วนนี้ไว้ชั่วคราวก่อน เพื่อให้แอปทำงานได้โดยไม่ต้องเรียก Backend ที่ยังไม่พร้อม
+  /*
+  useEffect(() => {
+    const loadUserFromStorage = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (token) {
+          const response = await axiosInstance.get('/api/users/me'); 
+          setUser(response.data);
+        }
+      } catch (e) {
+        console.error("Failed to load user from storage", e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadUserFromStorage();
+  }, []);
+  */
+
+  const login = async (username, password) => {
+    try {
+      const response = await axiosInstance.post('/api/users/login', {
+        username,
+        password,
+      });
+      const { user, token } = response.data;
+      await AsyncStorage.setItem('userToken', token);
+      setUser(user);
+      router.replace('/(tabs)/'); // แก้ไขให้ไปที่หน้าหลักของ Tabs
+    } catch (error) {
+      console.error("Login failed", error);
+      throw error; 
+    }
+  };
+
+  const logout = async () => {
+    await AsyncStorage.removeItem('userToken');
+    setUser(null);
+    router.replace('/login');
+  };
+
+  const value = { user, login, logout, isLoading };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
